@@ -67,6 +67,7 @@ Outputs are written to the chosen `--out` directory. The console prints a summar
 - out/index.html — Global overview
   - Totals: files, classes, findings
   - SOLID summary cards (S, O, L, I, D counts)
+  - Top files by LOC (logical lines of code), linked directly to file rows on package pages
   - Top 20 risky classes ranked by normalized lack of cohesion and severity
   - Links to per-package reports
 
@@ -177,6 +178,8 @@ This project is provided as-is. If a LICENSE file is present in the repository, 
 
 - Global Top 20 risky classes on index.html
   - The overview page now includes a "Top classes (global)" table ranked by severity (🟥 > 🟨 > 🟩) and normalized lack of cohesion.
+- Top files by LOC with deep links
+  - The overview page shows "Top files by LOC" (logical lines). Each file links directly to its row on the corresponding package page.
 - Heuristic complexity counts operators
   - The heuristic complexity metric now correctly counts &&, ||, and ? tokens in addition to if/for/while/case/catch.
 - REST timeout heuristic refined

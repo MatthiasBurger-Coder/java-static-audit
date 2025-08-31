@@ -151,6 +151,31 @@ def _top_classes_table(df) -> str:
     rows.append("</table>")
     return "\n".join(rows)
 
+
+def _top_files_by_loc_table(dffiles: pd.DataFrame) -> str:
+    if dffiles.empty:
+        return "<p class='muted'>No files.</p>"
+    rows = ["<table><tr><th>File</th><th>Lines (total)</th><th>Lines (logical)</th><th>Complexity (heuristic)</th></tr>"]
+    for _, r in dffiles.iterrows():
+        file = str(r.get("file",""))
+        pkg = _path_to_package(file)
+        fid = _file_slug(file)
+        if pkg:
+            href = f"package-{_html_escape(_package_slug(pkg))}.html#file-{_html_escape(fid)}"
+            file_cell = f"<a href='{href}'><span class='mono'>{_html_escape(file)}</span></a>"
+        else:
+            file_cell = f"<span class='mono'>{_html_escape(file)}</span>"
+        rows.append(
+            f"<tr>"
+            f"<td>{file_cell}</td>"
+            f"<td class='num'>{int(r.get('loc_total',0) or 0)}</td>"
+            f"<td class='num'>{int(r.get('loc_logical',0) or 0)}</td>"
+            f"<td class='num'>{int(r.get('complexity_est',0) or 0)}</td>"
+            f"</tr>"
+        )
+    rows.append("</table>")
+    return "\n".join(rows)
+
 def _findings_list(dff) -> str:
     out = []
     if dff.empty:
@@ -164,6 +189,12 @@ def _findings_list(dff) -> str:
         where = f"<b>{_html_escape(cls)}</b> — " if isinstance(cls, str) and cls else ""
         out.append(f"<li><span class='{_sev_class(sev)}'>&nbsp;{sev}&nbsp;</span> {where}<span class='mono'>{_html_escape(file)}</span> — <b>{_html_escape(rule)}</b>: {_html_escape(msg)}</li>")
     return "<ul>" + "\n".join(out) + "</ul>"
+
+def _file_slug(path: str) -> str:
+    p = (path or "").replace("\\", "/")
+    p = re.sub(r"[^A-Za-z0-9]+", "-", p)
+    return p.strip('-').lower()
+
 
 def _files_table(dffiles: pd.DataFrame, dff: pd.DataFrame) -> str:
     solid_counts: Dict[str, Dict[str, int]] = {}
@@ -187,8 +218,10 @@ def _files_table(dffiles: pd.DataFrame, dff: pd.DataFrame) -> str:
     for _, r in dffiles.iterrows():
         file = str(r.get("file",""))
         sc = solid_counts.get(file, {"S":0,"O":0,"L":0,"I":0,"D":0})
+        fid = _file_slug(file)
         rows.append(
-            f"<tr><td><span class='mono'>{_html_escape(file)}</span></td>"
+            f"<tr id='file-{fid}'>"
+            f"<td><span class='mono'>{_html_escape(file)}</span></td>"
             f"<td class='num'>{int(r.get('loc_total',0) or 0)}</td>"
             f"<td class='num'>{int(r.get('loc_logical',0) or 0)}</td>"
             f"<td class='num'>{int(r.get('complexity_est',0) or 0)}</td>"
@@ -254,6 +287,13 @@ def _write_index(out_dir: Path, df_files, dfc, dff):
     html.append("</div>")
     html.append("<h2>SOLID summary</h2>")
     html.append(_solid_summary_cards(dff))
+
+    # Top files by LOC (logical code lines)
+    if df_files is not None and not df_files.empty and "loc_logical" in df_files.columns:
+        top_files = df_files.sort_values(["loc_logical","loc_total"], ascending=[False, False]).head(20)
+        if not top_files.empty:
+            html.append("<h2>Top files by LOC</h2>")
+            html.append(_top_files_by_loc_table(top_files))
 
     # Global Top 20 risky classes (by severity then normalized lack of cohesion)
     if not dfc.empty and "severity" in dfc.columns and "normalized_lack_of_cohesion" in dfc.columns:
