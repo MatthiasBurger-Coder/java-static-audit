@@ -6,6 +6,7 @@ from analyzer.metrics import estimate_complexity, count_loc
 from analyzer.java_ast import classes_with_lcom_with_fallback
 from analyzer.heuristics_idempotency import scan as scan_idemp
 from analyzer.heuristics_resilience import scan as scan_res
+from analyzer.heuristics_solid import scan as scan_solid
 from analyzer.report import write_html, write_csvs
 
 def main():
@@ -48,6 +49,7 @@ def main():
             "complexity_est": cc,
         })
 
+        # per-class metrics
         for row in classes_with_lcom_with_fallback(src, str(f.relative_to(root))):
             if str(row.get('class')) == '<PARSE_ERROR>':
                 findings_rows.append({
@@ -57,11 +59,37 @@ def main():
                 })
                 continue
             class_rows.append(row)
+            # SRP via normalized LCOM
+            try:
+                m = int(row.get('methods',0) or 0)
+                l = float(row.get('lcom') or 0.0)
+                nlc = (l / (m*(m-1)/2.0)) if m >= 2 else 0.0
+                cls = str(row.get('class',''))
+                import re as _re
+                if nlc >= 0.80 and m >= 8 and not _re.search(r'(Aspect|State|NullObject|Repository|Listener)', cls, _re.IGNORECASE):
+                    findings_rows.append({
+                        'file': row.get('file'),
+                        'class': cls,
+                        'rule': 'SRP_VIOLATION',
+                        'message': f"{cls}: normalized lack of cohesion {int(round(nlc*100))}% with {m} methods; consider splitting."
+                    })
+            except Exception:
+                pass
 
+        # heuristics (file scope)
         for rule, msg in scan_idemp(src):
             findings_rows.append({"file": str(f.relative_to(root)), "rule": rule, "message": msg})
         for rule, msg in scan_res(src):
             findings_rows.append({"file": str(f.relative_to(root)), "rule": rule, "message": msg})
+
+        # heuristics (SOLID, per class if available)
+        for item in scan_solid(src):
+            if isinstance(item, tuple) and len(item) == 3:
+                rule, msg, clsname = item
+                findings_rows.append({"file": str(f.relative_to(root)), "rule": rule, "message": msg, "class": clsname})
+            else:
+                rule, msg = item[:2]
+                findings_rows.append({"file": str(f.relative_to(root)), "rule": rule, "message": msg})
 
         count += 1
 

@@ -34,15 +34,10 @@ def _walk_ast(obj: Any) -> Iterable[Node]:
             stack.extend(cur)
 
 def _used_members_in_method(meth: Any, candidate_fields: Set[str]) -> Set[str]:
-    """Approximate set of field names used in method body.
-    Treats both MemberReference and MethodInvocation qualifiers as field usage.
-    Supports qualifier chains like 'this.repo' or 'service.repo' by matching the last segment.
-    """
     used = set()
     if not getattr(meth, "body", None):
         return used
     for node in _walk_ast(meth.body):
-        # Direct member access, e.g., 'this.field' or 'field'
         if isinstance(node, javalang.tree.MemberReference):
             name = getattr(node, "member", None)
             qual = getattr(node, "qualifier", None)
@@ -52,7 +47,6 @@ def _used_members_in_method(meth: Any, candidate_fields: Set[str]) -> Set[str]:
                 last = str(qual).split(".")[-1]
                 if last in candidate_fields:
                     used.add(last)
-        # Method call on a field, e.g., 'repo.save(...)' or 'this.repo.save(...)'
         if isinstance(node, javalang.tree.MethodInvocation):
             qual = getattr(node, "qualifier", None)
             if qual:
@@ -62,9 +56,6 @@ def _used_members_in_method(meth: Any, candidate_fields: Set[str]) -> Set[str]:
     return used
 
 def classes_with_lcom(java_source: str, filename: str) -> list[dict]:
-    """Parse a compilation unit and compute an LCOM-like cohesion metric per class.
-    Returns list of dicts: {file, class, methods, lcom, fields}
-    """
     results: list[dict] = []
     try:
         tree = javalang.parse.parse(java_source)
@@ -101,7 +92,6 @@ def classes_with_lcom(java_source: str, filename: str) -> list[dict]:
             })
     return results
 
-# --- Tree-sitter fallback (official packages: tree-sitter, tree-sitter-java) ---
 def _ts_available() -> bool:
     try:
         import tree_sitter_java  # noqa: F401
@@ -123,7 +113,6 @@ def _classes_with_lcom_tree_sitter(java_source: str, filename: str) -> list[dict
 
         def text(n): return src[n.start_byte:n.end_byte].decode("utf-8", errors="ignore")
 
-        # collect class declarations
         classes = []
         stack = [root]
         while stack:
@@ -143,7 +132,6 @@ def _classes_with_lcom_tree_sitter(java_source: str, filename: str) -> list[dict
             if cbody is None:
                 continue
 
-            # fields
             fields = set()
             st = [cbody]
             while st:
@@ -156,7 +144,6 @@ def _classes_with_lcom_tree_sitter(java_source: str, filename: str) -> list[dict
                                     fields.add(text(ch2))
                 st.extend(reversed(n.children))
 
-            # methods (name + block)
             methods = []
             st = [cbody]
             while st:
@@ -172,7 +159,6 @@ def _classes_with_lcom_tree_sitter(java_source: str, filename: str) -> list[dict
                         methods.append((mname, mbody))
                 st.extend(reversed(n.children))
 
-            # used fields per method
             def used_fields(bnode):
                 used = set()
                 if bnode is None:
@@ -181,14 +167,12 @@ def _classes_with_lcom_tree_sitter(java_source: str, filename: str) -> list[dict
                 while st2:
                     x = st2.pop()
                     if x.type == "field_access":
-                        # object.identifier  OR  this.identifier
                         idents = [ch for ch in x.children if ch.type == "identifier"]
                         for idn in idents:
                             nm = text(idn)
                             if nm in fields:
                                 used.add(nm)
                     elif x.type == "method_invocation":
-                        # object.method(...): first identifier often the object
                         idents = [ch for ch in x.children if ch.type == "identifier"]
                         if idents:
                             obj = text(idents[0]).split(".")[-1]
@@ -213,7 +197,6 @@ def _classes_with_lcom_tree_sitter(java_source: str, filename: str) -> list[dict
         return [{"file": filename, "class": "<PARSE_ERROR>", "methods": 0, "lcom": None, "error": f"tree-sitter-fallback-failed: {e}"}]
 
 def classes_with_lcom_with_fallback(java_source: str, filename: str) -> list[dict]:
-    # try javalang first
     try:
         res = classes_with_lcom(java_source, filename)
         if any(r.get("class") == "<PARSE_ERROR>" for r in res):

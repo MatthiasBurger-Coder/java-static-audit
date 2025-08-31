@@ -1,16 +1,14 @@
+
 from pathlib import Path
 import pandas as pd
 import re
 from typing import List, Dict, Tuple
 
-# --- Thresholds for normalized lack of cohesion ---
 RED_THR = 0.80
 YEL_THR = 0.40
 
-# Classes that often have legitimately low cohesion (pattern exceptions)
 EXEMPTION_PATTERNS = re.compile(r"(Aspect|State|NullObject|Repository|Listener)", re.IGNORECASE)
 
-# Rule -> default severity
 RULE_SEVERITY = {
     "PARSE_ERROR": "🟨",
     "STATIC_STATE_MUTATION": "🟨",
@@ -21,7 +19,25 @@ RULE_SEVERITY = {
     "FEIGN_NO_TIMEOUTS": "🟥",
     "POST_WRITE_NO_IDEMPOTENCY_HINT": "🟥",
     "NON_DETERMINISM": "🟨",
+    # SOLID
+    "SRP_VIOLATION": "🟥",
+    "OCP_SMELL_SWITCH_ON_TYPE": "🟨",
+    "OCP_SMELL_INSTANCEOF_CHAIN": "🟨",
+    "LSP_VIOLATION_UNSUPPORTED": "🟥",
+    "ISP_SMELL_FAT_INTERFACE": "🟨",
+    "ISP_SMELL_EMPTY_IMPLEMENTATION": "🟨",
+    "DIP_VIOLATION_CONCRETE_DEP": "🟥",
 }
+
+SOLID_RULES = {
+    "S": {"SRP_VIOLATION"},
+    "O": {"OCP_SMELL_SWITCH_ON_TYPE", "OCP_SMELL_INSTANCEOF_CHAIN"},
+    "L": {"LSP_VIOLATION_UNSUPPORTED"},
+    "I": {"ISP_SMELL_FAT_INTERFACE", "ISP_SMELL_EMPTY_IMPLEMENTATION"},
+    "D": {"DIP_VIOLATION_CONCRETE_DEP"},
+}
+
+SEV_WEIGHT = {"🟥": 2, "🟨": 1}
 
 def _html_escape(s: str) -> str:
     return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -54,14 +70,16 @@ def _class_severity(methods: int, lcom: float, class_name: str) -> Tuple[str, st
 
 def _path_to_package(path: str) -> str:
     p = (path or "").replace("\\", "/")
-    if "/java/" in p:
-        pkg_part = p.split("/java/", 1)[1]
-        if "/" in pkg_part:
-            pkg_part = pkg_part.rsplit("/", 1)[0]
-        return pkg_part.replace("/", ".")
+    p = re.sub(r"/+", "/", p)
+    m = re.search(r"/src/(?:main|test)/java/(.*?)/[^/]+\.java$", p)
+    if m:
+        return m.group(1).replace("/", ".").strip(".")
+    if re.search(r"/src/(?:main|test)/java/[^/]+\.java$", p):
+        return ""
     if "/" in p:
-        pkg_part = p.rsplit("/", 1)[0]
-        return pkg_part.replace("/", ".")
+        dirpart = p.rsplit("/", 1)[0]
+        dirpart = re.sub(r"^.*?/src/(?:main|test)/java/", "", dirpart)
+        return dirpart.replace("/", ".").strip(".")
     return ""
 
 def _style() -> str:
@@ -84,6 +102,7 @@ def _style() -> str:
       a:hover { text-decoration: underline; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
       .explain { margin: 10px 0 20px; padding: 12px; background: #f9fafb; border: 1px dashed #dcdcdc; border-radius: 10px;}
+      td.num { text-align: right; }
     </style>
     """
 
@@ -123,9 +142,9 @@ def _top_classes_table(df) -> str:
         sev = r.get("severity","🟨")
         rows.append(
             f"<tr><td><span class='mono'>{_html_escape(r.get('class',''))}</span></td>"
-            f"<td>{int(r.get('methods',0) or 0)}</td>"
-            f"<td>{_html_escape(str(r.get('lcom','')))}</td>"
-            f"<td>{nlc}%</td>"
+            f"<td class='num'>{int(r.get('methods',0) or 0)}</td>"
+            f"<td class='num'>{_html_escape(str(r.get('lcom','')))}</td>"
+            f"<td class='num'>{nlc}%</td>"
             f"<td><span class='{_sev_class(sev)}'>&nbsp;{sev}&nbsp;</span></td>"
             f"<td>{_html_escape(r.get('note',''))}</td></tr>"
         )
@@ -141,19 +160,44 @@ def _findings_list(dff) -> str:
         sev = r.get("sev", RULE_SEVERITY.get(rule, "🟨"))
         msg = r.get("message", "(no message)") or "(no message)"
         file = r.get("file","")
-        out.append(f"<li><span class='{_sev_class(sev)}'>&nbsp;{sev}&nbsp;</span> <span class='mono'>{_html_escape(file)}</span> — <b>{_html_escape(rule)}</b>: {_html_escape(msg)}</li>")
+        cls = r.get("class", "")
+        where = f"<b>{_html_escape(cls)}</b> — " if isinstance(cls, str) and cls else ""
+        out.append(f"<li><span class='{_sev_class(sev)}'>&nbsp;{sev}&nbsp;</span> {where}<span class='mono'>{_html_escape(file)}</span> — <b>{_html_escape(rule)}</b>: {_html_escape(msg)}</li>")
     return "<ul>" + "\n".join(out) + "</ul>"
 
-def _files_table(dffiles) -> str:
+def _files_table(dffiles: pd.DataFrame, dff: pd.DataFrame) -> str:
+    solid_counts: Dict[str, Dict[str, int]] = {}
+    if dff is not None and not dff.empty:
+        for _, r in dff.iterrows():
+            file = str(r.get("file",""))
+            rule = str(r.get("rule",""))
+            sev = r.get("sev", RULE_SEVERITY.get(rule, "🟨"))
+            weight = SEV_WEIGHT.get(sev, 1)
+            for letter, rules in SOLID_RULES.items():
+                if rule in rules:
+                    solid_counts.setdefault(file, {"S":0,"O":0,"L":0,"I":0,"D":0})
+                    solid_counts[file][letter] += weight
+
     if dffiles.empty:
         return "<p class='muted'>No files.</p>"
-    rows = ["<table><tr><th>File</th><th>Lines (total)</th><th>Lines (logical)</th><th>Complexity (heuristic)</th></tr>"]
+    rows = ["<table><tr>"
+            "<th>File</th><th>Lines (total)</th><th>Lines (logical)</th><th>Complexity (heuristic)</th>"
+            "<th>S</th><th>O</th><th>L</th><th>I</th><th>D</th>"
+            "</tr>"]
     for _, r in dffiles.iterrows():
+        file = str(r.get("file",""))
+        sc = solid_counts.get(file, {"S":0,"O":0,"L":0,"I":0,"D":0})
         rows.append(
-            f"<tr><td><span class='mono'>{_html_escape(r.get('file',''))}</span></td>"
-            f"<td>{int(r.get('loc_total',0) or 0)}</td>"
-            f"<td>{int(r.get('loc_logical',0) or 0)}</td>"
-            f"<td>{int(r.get('complexity_est',0) or 0)}</td></tr>"
+            f"<tr><td><span class='mono'>{_html_escape(file)}</span></td>"
+            f"<td class='num'>{int(r.get('loc_total',0) or 0)}</td>"
+            f"<td class='num'>{int(r.get('loc_logical',0) or 0)}</td>"
+            f"<td class='num'>{int(r.get('complexity_est',0) or 0)}</td>"
+            f"<td class='num'>{sc['S']}</td>"
+            f"<td class='num'>{sc['O']}</td>"
+            f"<td class='num'>{sc['L']}</td>"
+            f"<td class='num'>{sc['I']}</td>"
+            f"<td class='num'>{sc['D']}</td>"
+            f"</tr>"
         )
     rows.append("</table>")
     return "\n".join(rows)
@@ -181,61 +225,36 @@ def _augment_findings_df(dff: pd.DataFrame) -> pd.DataFrame:
         dff2["sev"] = dff2["rule"].map(lambda r: RULE_SEVERITY.get(str(r), "🟨"))
     return dff2
 
-def _class_interpretation(row: Dict) -> str:
-    """Generate an English explanation of the class metrics & meaning."""
-    cls = str(row.get("class",""))
-    m = int(row.get("methods",0) or 0)
-    lcom = row.get("lcom", None)
-    nlc = float(row.get("normalized_lack_of_cohesion") or 0.0)
-    sev = row.get("severity","🟨")
-    note = row.get("note","")
-    nlc_pct = int(round(nlc*100))
-    meaning = []
-    meaning.append(f"<b>{_html_escape(cls)}</b> has <b>{m}</b> methods. ")
-    meaning.append(f"The <i>normalized lack of cohesion</i> is <b>{nlc_pct}%</b> ")
-    meaning.append(f"(<span class='{_sev_class(sev)}'>&nbsp;{sev}&nbsp;</span>), ")
-    if sev == "🟥":
-        meaning.append("which indicates methods rarely share state. Consider splitting responsibilities (SRP), extracting cohesive components, or injecting collaborators. ")
-    elif sev == "🟨":
-        meaning.append("which is moderate; review the class responsibilities and check for utility/god-class smells. ")
-    else:
-        meaning.append("which suggests good cohesion. ")
-    if isinstance(lcom, (int, float)):
-        meaning.append(f"Raw LCOM = <code>{lcom}</code>. ")
-    if note:
-        meaning.append(f"Note: { _html_escape(note) } ")
-    meaning.append("Heuristic tip: if methods mainly call collaborators (e.g., <code>repo.save(...)</code>), cohesion can still be good even with low field sharing.")
-    return "".join(meaning)
+def _solid_summary_cards(dff) -> str:
+    if dff is None or dff.empty:
+        return "<div class='muted'>No SOLID signals detected.</div>"
+    r = dff["rule"].astype(str)
+    S = (r == "SRP_VIOLATION").sum()
+    O = r.isin(["OCP_SMELL_SWITCH_ON_TYPE","OCP_SMELL_INSTANCEOF_CHAIN"]).sum()
+    L = (r == "LSP_VIOLATION_UNSUPPORTED").sum()
+    I = r.isin(["ISP_SMELL_FAT_INTERFACE","ISP_SMELL_EMPTY_IMPLEMENTATION"]).sum()
+    D = (r == "DIP_VIOLATION_CONCRETE_DEP").sum()
+    return (
+      "<div class='grid'>"
+      f"<div class='card'><div class='muted'>S — Single Responsibility</div><div><b>{int(S)}</b> issues</div></div>"
+      f"<div class='card'><div class='muted'>O — Open/Closed</div><div><b>{int(O)}</b> smells</div></div>"
+      f"<div class='card'><div class='muted'>L — Liskov</div><div><b>{int(L)}</b> violations</div></div>"
+      f"<div class='card'><div class='muted'>I — Interface Segregation</div><div><b>{int(I)}</b> smells</div></div>"
+      f"<div class='card'><div class='muted'>D — Dependency Inversion</div><div><b>{int(D)}</b> issues</div></div>"
+      "</div>"
+    )
 
-def write_html(out_dir: Path, files_rows: List[Dict], class_rows: List[Dict], findings_rows: List[Dict]) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    df_files = pd.DataFrame(files_rows)
-    dfc_raw = pd.DataFrame(class_rows)
-    dff_raw = pd.DataFrame(findings_rows)
-
-    dfc = _augment_class_df(dfc_raw) if not dfc_raw.empty else pd.DataFrame(columns=["file","class","methods","lcom","package","normalized_lack_of_cohesion","severity","note"])
-    dff = _augment_findings_df(dff_raw) if not dff_raw.empty else pd.DataFrame(columns=["file","rule","message","package","sev"])
-    dffiles = _augment_files_df(df_files) if not df_files.empty else pd.DataFrame(columns=["file","package"])
-
-    # --- INDEX.HTML ---
+def _write_index(out_dir: Path, df_files, dfc, dff):
     title = "Static Audit Report"
     html = [_header(title, "Global overview"), _legend()]
-    # summary cards
     html.append("<div class='grid'>")
     html.append(f"<div class='card'><div class='muted'>Files</div><div><b>{len(df_files)}</b></div></div>")
     html.append(f"<div class='card'><div class='muted'>Classes</div><div><b>{len(dfc)}</b></div></div>")
     html.append(f"<div class='card'><div class='muted'>Findings</div><div><b>{len(dff)}</b></div></div>")
     html.append("</div>")
-
-    # Top risky classes (global)
-    if not dfc.empty:
-        sev_rank = {'🟥':2,'🟨':1,'🟩':0}
-        top = dfc.assign(sev_rank=dfc["severity"].map(sev_rank)).sort_values(["sev_rank","normalized_lack_of_cohesion"], ascending=[False,False]).head(20)
-        html.append("<h2>Top 20 risky classes (global)</h2>")
-        html.append(_top_classes_table(top))
-
-    # Package list with links
-    pkgs = sorted([p for p in dfc["package"].dropna().unique()]) if not dfc.empty else []
+    html.append("<h2>SOLID summary</h2>")
+    html.append(_solid_summary_cards(dff))
+    pkgs = sorted([p for p in dfc["package"].dropna().unique() if str(p).strip() != ""]) if not dfc.empty else []
     if pkgs:
         html.append("<h2>Packages</h2><ul>")
         for p in pkgs:
@@ -244,56 +263,60 @@ def write_html(out_dir: Path, files_rows: List[Dict], class_rows: List[Dict], fi
         html.append("</ul>")
     else:
         html.append("<p class='muted'>No packages detected.</p>")
-
     html.append(_footer())
     _write_html(out_dir / "index.html", "\n".join(html))
 
-    # --- PER-PACKAGE REPORTS ---
-    if pkgs:
-        for p in pkgs:
-            slug = _package_slug(p)
-            sub = [ _header(f"Package: {p}", "Detailed package report"), _legend() ]
-            # filter
-            dfc_pkg = dfc[dfc["package"] == p]
-            dff_pkg = dff[dff["package"] == p]
-            dffiles_pkg = dffiles[dffiles["package"] == p]
+def _write_package(out_dir: Path, p: str, dfc, dff, dffiles):
+    slug = _package_slug(p)
+    sub = [ _header(f"Package: {p}", "Detailed package report with SOLID"), _legend() ]
+    sub.append("<div class='grid'>")
+    sub.append(f"<div class='card'><div class='muted'>Files</div><div><b>{len(dffiles)}</b></div></div>")
+    sub.append(f"<div class='card'><div class='muted'>Classes</div><div><b>{len(dfc)}</b></div></div>")
+    sub.append(f"<div class='card'><div class='muted'>Findings</div><div><b>{len(dff)}</b></div></div>")
+    sub.append("</div>")
+    sub.append("<h2>SOLID summary</h2>")
+    sub.append(_solid_summary_cards(dff))
+    if not dfc.empty:
+        sev_rank = {'🟥':2,'🟨':1,'🟩':0}
+        top_pkg = dfc.assign(sev_rank=dfc["severity"].map(sev_rank)).sort_values(["sev_rank","normalized_lack_of_cohesion"], ascending=[False,False]).head(20)
+        sub.append("<h2>Top classes (package)</h2>")
+        sub.append(_top_classes_table(top_pkg))
+        sub.append("<h2>Per-class details</h2>")
+        for _, row in dfc.sort_values(['severity','normalized_lack_of_cohesion'], ascending=[True,False]).iterrows():
+            cname = str(row['class'])
+            nlc = int(round((row.get('normalized_lack_of_cohesion') or 0.0) * 100))
+            sev = row.get('severity','🟨')
+            note = row.get('note','')
+            lcom = row.get('lcom')
+            m = int(row.get('methods',0) or 0)
+            explain = f"<b>{cname}</b> has <b>{m}</b> methods; normalized lack of cohesion <b>{nlc}%</b> (<span class='{_sev_class(sev)}'>&nbsp;{sev}&nbsp;</span>). Raw LCOM=<code>{lcom}</code>. {note}"
+            sub.append(f"<div class='explain'>{explain}</div>")
+    sub.append("<h2>Findings (all)</h2>")
+    sub.append(_findings_list(dff))
+    sub.append("<h2>Files in package</h2>")
+    sub.append(_files_table(dffiles, dff))
+    sub.append("<p><a href='index.html'>&larr; Back to overview</a></p>")
+    sub.append(_footer())
+    _write_html(out_dir / f"package-{slug}.html", "\n".join(sub))
 
-            # summary
-            sub.append("<div class='grid'>")
-            sub.append(f"<div class='card'><div class='muted'>Files</div><div><b>{len(dffiles_pkg)}</b></div></div>")
-            sub.append(f"<div class='card'><div class='muted'>Classes</div><div><b>{len(dfc_pkg)}</b></div></div>")
-            sub.append(f"<div class='card'><div class='muted'>Findings</div><div><b>{len(dff_pkg)}</b></div></div>")
-            sub.append("</div>")
+def write_html(out_dir: Path, files_rows: List[Dict], class_rows: List[Dict], findings_rows: List[Dict]) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    df_files = pd.DataFrame(files_rows)
+    dfc_raw = pd.DataFrame(class_rows)
+    dff_raw = pd.DataFrame(findings_rows)
 
-            # top classes in package
-            if not dfc_pkg.empty:
-                sev_rank = {'🟥':2,'🟨':1,'🟩':0}
-                top_pkg = dfc_pkg.assign(sev_rank=dfc_pkg["severity"].map(sev_rank)).sort_values(["sev_rank","normalized_lack_of_cohesion"], ascending=[False,False]).head(20)
-                sub.append("<h2>Top classes (package)</h2>")
-                sub.append(_top_classes_table(top_pkg))
+    dfc = _augment_class_df(dfc_raw) if not dfc_raw.empty else pd.DataFrame(columns=["file","class","methods","lcom","package","normalized_lack_of_cohesion","severity","note"])
+    dff = _augment_findings_df(dff_raw) if not dff_raw.empty else pd.DataFrame(columns=["file","rule","message","package","sev","class"])
+    dffiles = _augment_files_df(df_files) if not df_files.empty else pd.DataFrame(columns=["file","package"])
 
-                # full classes table
-                sub.append("<h3>All classes</h3>")
-                all_tbl = dfc_pkg.sort_values(['severity','normalized_lack_of_cohesion'], ascending=[True,False])
-                sub.append(_top_classes_table(all_tbl))
+    _write_index(out_dir, df_files, dfc, dff)
 
-                # explanations per class
-                sub.append("<h2>Per-class explanations</h2>")
-                for _, row in all_tbl.iterrows():
-                    sub.append(f"<div class='explain'>{_class_interpretation(row.to_dict())}</div>")
-
-            # findings
-            sub.append("<h2>Findings</h2>")
-            sub.append(_findings_list(dff_pkg))
-
-            # files
-            sub.append("<h2>Files in package</h2>")
-            sub.append(_files_table(dffiles_pkg))
-
-            sub.append("<p><a href='index.html'>&larr; Back to overview</a></p>")
-            sub.append(_footer())
-
-            _write_html(out_dir / f"package-{slug}.html", "\n".join(sub))
+    pkgs = sorted([p for p in dfc["package"].dropna().unique() if str(p).strip() != ""]) if not dfc.empty else []
+    for p in pkgs:
+        dfc_pkg = dfc[dfc["package"] == p]
+        dff_pkg = dff[dff["package"] == p]
+        dffiles_pkg = dffiles[dffiles["package"] == p]
+        _write_package(out_dir, p, dfc_pkg, dff_pkg, dffiles_pkg)
 
 def write_csvs(out_dir: Path, files_rows: List[Dict], class_rows: List[Dict], findings_rows: List[Dict]) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)

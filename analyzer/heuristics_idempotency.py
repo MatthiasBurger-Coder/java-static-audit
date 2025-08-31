@@ -5,7 +5,6 @@ POST_MAPPING = re.compile(r"@PostMapping|@RequestMapping\s*\([^)]*method\s*=\s*R
 DB_WRITE = re.compile(r"\b(save|insert|persist|merge|update)\s*\(", re.IGNORECASE)
 TIME_CALLS = re.compile(r"\b(System\.currentTimeMillis|LocalDateTime\.now|Instant\.now|new\s+Date\s*\()", re.MULTILINE)
 RAND_CALLS = re.compile(r"\b(Random\s*\(|Math\.random\(\))", re.MULTILINE)
-# Only mutable static: 'static' not followed by 'final', with an assignment somewhere before ';'
 STATIC_STATE = re.compile(r"\bstatic\b(?!\s+final\b)[^;=]*=", re.MULTILINE)
 
 LOGGER_HINT = re.compile(r"\bLogger\b|\bSlf4j\b|\bLogFactory\b", re.IGNORECASE)
