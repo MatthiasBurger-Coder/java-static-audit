@@ -254,6 +254,17 @@ def _write_index(out_dir: Path, df_files, dfc, dff):
     html.append("</div>")
     html.append("<h2>SOLID summary</h2>")
     html.append(_solid_summary_cards(dff))
+
+    # Global Top 20 risky classes (by severity then normalized lack of cohesion)
+    if not dfc.empty and "severity" in dfc.columns and "normalized_lack_of_cohesion" in dfc.columns:
+        sev_rank = {'🟥': 2, '🟨': 1, '🟩': 0}
+        top_global = dfc.assign(sev_rank=dfc["severity"].map(sev_rank)).sort_values(
+            ["sev_rank", "normalized_lack_of_cohesion"], ascending=[False, False]
+        ).head(20)
+        if not top_global.empty:
+            html.append("<h2>Top classes (global)</h2>")
+            html.append(_top_classes_table(top_global))
+
     pkgs = sorted([p for p in dfc["package"].dropna().unique() if str(p).strip() != ""]) if not dfc.empty else []
     if pkgs:
         html.append("<h2>Packages</h2><ul>")

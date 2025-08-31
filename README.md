@@ -171,3 +171,18 @@ Arguments:
 ## License
 
 This project is provided as-is. If a LICENSE file is present in the repository, its terms apply. Otherwise, consult the repository owner for licensing and usage permissions.
+
+
+## What's new (2025-08-31)
+
+- Global Top 20 risky classes on index.html
+  - The overview page now includes a "Top classes (global)" table ranked by severity (🟥 > 🟨 > 🟩) and normalized lack of cohesion.
+- Heuristic complexity counts operators
+  - The heuristic complexity metric now correctly counts &&, ||, and ? tokens in addition to if/for/while/case/catch.
+- REST timeout heuristic refined
+  - REST_NO_TIMEOUT will no longer trigger if the same file shows clear timeout hints (e.g., setConnectTimeout/setReadTimeout) or usage of a custom ClientHttpRequestFactory.
+
+## Heuristic nuances
+
+- Complexity is a rough estimate intended for ranking; it simply counts occurrences of decision-like tokens.
+- REST_NO_TIMEOUT is intentionally conservative but tries to reduce noise by ignoring files that appear to configure timeouts or a custom RequestFactory.

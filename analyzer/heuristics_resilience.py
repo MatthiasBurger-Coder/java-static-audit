@@ -10,8 +10,17 @@ FEIGN = re.compile(r"@FeignClient\(")
 def scan(java_source: str) -> List[Tuple[str, str]]:
     findings: List[Tuple[str, str]] = []
     if RESTTEMPLATE.search(java_source):
-        findings.append(("REST_NO_TIMEOUT",
-                        "RestTemplate instantiation detected; ensure custom RequestFactory with connect/read timeouts."))
+        # Skip if there are obvious timeout hints or a custom RequestFactory in the same file
+        timeout_hints = (
+            "setConnectTimeout" in java_source or
+            "setReadTimeout" in java_source or
+            "ClientHttpRequestFactory" in java_source or
+            "HttpComponentsClientHttpRequestFactory" in java_source or
+            "RequestFactory" in java_source
+        )
+        if not timeout_hints:
+            findings.append(("REST_NO_TIMEOUT",
+                            "RestTemplate instantiation detected; ensure custom RequestFactory with connect/read timeouts."))
     if CATCH_ALL.search(java_source):
         findings.append(("CATCH_GENERIC_EXCEPTION",
                         "Catching generic Exception; prefer specific exceptions or rethrow with context."))

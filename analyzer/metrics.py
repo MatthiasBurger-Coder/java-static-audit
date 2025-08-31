@@ -1,7 +1,8 @@
 import re
 
 # Simple cyclomatic complexity estimate by counting decision points.
-DECISION_TOKENS = re.compile(r"\b(if|for|while|case|catch|&&|\|\||\?)\b")
+# Keywords are matched at word boundaries; operators are matched as-is.
+DECISION_TOKENS = re.compile(r"\b(if|for|while|case|catch)\b|&&|\|\||\?")
 
 def estimate_complexity(java_source: str) -> int:
     """Very rough CC estimate via keyword counting. Useful for ranking only."""
