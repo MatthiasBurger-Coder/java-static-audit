@@ -1,0 +1,96 @@
+<head><meta charset='utf-8'><title>Static Audit Report</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+      h1,h2,h3 { margin-top: 1.2em; }
+      table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+      th, td { border: 1px solid #ddd; padding: 8px; }
+      th { background: #f5f5f5; text-align: left; }
+      tr:nth-child(even) { background: #fafafa; }
+      .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+      .r { background: #ffe5e5; }
+      .y { background: #fff4cc; }
+      .g { background: #e6ffed; }
+      .muted { color: #666; font-size: 0.9em; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+      .card { border: 1px solid #eee; border-radius: 12px; padding: 12px; }
+      a { color: #0b6bcb; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    </style>
+    </head><body><h1>Static Audit Report</h1><p class='muted'>Gesamtübersicht</p>
+
+    <div class='card'>
+      <h3>Ampel-Kriterien (Kohäsion/LCOM)</h3>
+      <ul>
+        <li><span class='pill r'>&nbsp;🟥 Rot&nbsp;</span> Lack of Cohesion (normalized) ≥ 80%</li>
+        <li><span class='pill y'>&nbsp;🟨 Gelb&nbsp;</span> 40% ≤ Lack of Cohesion (normalized) &lt; 80%</li>
+        <li><span class='pill g'>&nbsp;🟩 Grün&nbsp;</span> Lack of Cohesion (normalized) &lt; 40%</li>
+      </ul>
+      <p class='muted'>Pattern-Ausnahmen (Aspect/State/NullObject/Repository/Listener) werden um eine Stufe entschärft.</p>
+    </div>
+    
+<div class='grid'>
+<div class='card'><div class='muted'>Files</div><div><b>90</b></div></div>
+<div class='card'><div class='muted'>Classes</div><div><b>71</b></div></div>
+<div class='card'><div class='muted'>Findings</div><div><b>6</b></div></div>
+</div>
+<h2>Top 20 riskante Klassen (global)</h2>
+<table><tr><th>Klasse</th><th>Methoden</th><th>LCOM</th><th>Lack of Cohesion (normalized)</th><th>Ampel</th><th>Kommentar</th></tr>
+<tr><td><span class='mono'>Main</span></td><td>10</td><td>45.0</td><td>100%</td><td><span class='pill r'>&nbsp;🟥&nbsp;</span></td><td></td></tr>
+<tr><td><span class='mono'>CartProcessConfig</span></td><td>3</td><td>3.0</td><td>100%</td><td><span class='pill r'>&nbsp;🟥&nbsp;</span></td><td></td></tr>
+<tr><td><span class='mono'>CustomerProcessConfig</span></td><td>2</td><td>1.0</td><td>100%</td><td><span class='pill r'>&nbsp;🟥&nbsp;</span></td><td></td></tr>
+<tr><td><span class='mono'>OrderProcessConfig</span></td><td>4</td><td>6.0</td><td>100%</td><td><span class='pill r'>&nbsp;🟥&nbsp;</span></td><td></td></tr>
+<tr><td><span class='mono'>ProcessPipeline</span></td><td>6</td><td>15.0</td><td>100%</td><td><span class='pill r'>&nbsp;🟥&nbsp;</span></td><td></td></tr>
+<tr><td><span class='mono'>CartEventListener</span></td><td>3</td><td>3.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>CustomerEventListener</span></td><td>2</td><td>1.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>OrderEventListener</span></td><td>4</td><td>6.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>ActiveCartState</span></td><td>6</td><td>15.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>ClosedCartState</span></td><td>6</td><td>15.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>CreatedCartState</span></td><td>6</td><td>15.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>OrderedCartState</span></td><td>6</td><td>15.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>CustomerNullObject</span></td><td>5</td><td>10.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>ActivatedState</span></td><td>4</td><td>6.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>CreatedState</span></td><td>4</td><td>6.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>NullCustomerState</span></td><td>5</td><td>10.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>SuspendedState</span></td><td>4</td><td>6.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>OrderNullObject</span></td><td>3</td><td>3.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>CanceledState</span></td><td>4</td><td>6.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+<tr><td><span class='mono'>DeliveredState</span></td><td>4</td><td>6.0</td><td>100%</td><td><span class='pill y'>&nbsp;🟨&nbsp;</span></td><td>Muster-Ausnahme (Pattern) – eine Stufe entschärft</td></tr>
+</table>
+<h2>Packages</h2><ul>
+<li><a href='package-de-burger-it.html'><span class='mono'>de.burger.it</span></a></li>
+<li><a href='package-de-burger-it-application-cart-handler.html'><span class='mono'>de.burger.it.application.cart.handler</span></a></li>
+<li><a href='package-de-burger-it-application-cart-listener.html'><span class='mono'>de.burger.it.application.cart.listener</span></a></li>
+<li><a href='package-de-burger-it-application-cart-process.html'><span class='mono'>de.burger.it.application.cart.process</span></a></li>
+<li><a href='package-de-burger-it-application-cart-service.html'><span class='mono'>de.burger.it.application.cart.service</span></a></li>
+<li><a href='package-de-burger-it-application-config.html'><span class='mono'>de.burger.it.application.config</span></a></li>
+<li><a href='package-de-burger-it-application-customer-handler.html'><span class='mono'>de.burger.it.application.customer.handler</span></a></li>
+<li><a href='package-de-burger-it-application-customer-listener.html'><span class='mono'>de.burger.it.application.customer.listener</span></a></li>
+<li><a href='package-de-burger-it-application-customer-process.html'><span class='mono'>de.burger.it.application.customer.process</span></a></li>
+<li><a href='package-de-burger-it-application-customer-service.html'><span class='mono'>de.burger.it.application.customer.service</span></a></li>
+<li><a href='package-de-burger-it-application-order-handler.html'><span class='mono'>de.burger.it.application.order.handler</span></a></li>
+<li><a href='package-de-burger-it-application-order-listener.html'><span class='mono'>de.burger.it.application.order.listener</span></a></li>
+<li><a href='package-de-burger-it-application-order-process.html'><span class='mono'>de.burger.it.application.order.process</span></a></li>
+<li><a href='package-de-burger-it-application-order-service.html'><span class='mono'>de.burger.it.application.order.service</span></a></li>
+<li><a href='package-de-burger-it-application-process.html'><span class='mono'>de.burger.it.application.process</span></a></li>
+<li><a href='package-de-burger-it-domain-cart-event.html'><span class='mono'>de.burger.it.domain.cart.event</span></a></li>
+<li><a href='package-de-burger-it-domain-cart-model.html'><span class='mono'>de.burger.it.domain.cart.model</span></a></li>
+<li><a href='package-de-burger-it-domain-cart-state.html'><span class='mono'>de.burger.it.domain.cart.state</span></a></li>
+<li><a href='package-de-burger-it-domain-customer-event.html'><span class='mono'>de.burger.it.domain.customer.event</span></a></li>
+<li><a href='package-de-burger-it-domain-customer-model.html'><span class='mono'>de.burger.it.domain.customer.model</span></a></li>
+<li><a href='package-de-burger-it-domain-customer-state.html'><span class='mono'>de.burger.it.domain.customer.state</span></a></li>
+<li><a href='package-de-burger-it-domain-order-event.html'><span class='mono'>de.burger.it.domain.order.event</span></a></li>
+<li><a href='package-de-burger-it-domain-order-model.html'><span class='mono'>de.burger.it.domain.order.model</span></a></li>
+<li><a href='package-de-burger-it-domain-order-state.html'><span class='mono'>de.burger.it.domain.order.state</span></a></li>
+<li><a href='package-de-burger-it-domain-relation-model.html'><span class='mono'>de.burger.it.domain.relation.model</span></a></li>
+<li><a href='package-de-burger-it-infrastructure-cart-adapter.html'><span class='mono'>de.burger.it.infrastructure.cart.adapter</span></a></li>
+<li><a href='package-de-burger-it-infrastructure-cart-model.html'><span class='mono'>de.burger.it.infrastructure.cart.model</span></a></li>
+<li><a href='package-de-burger-it-infrastructure-customer-adapter.html'><span class='mono'>de.burger.it.infrastructure.customer.adapter</span></a></li>
+<li><a href='package-de-burger-it-infrastructure-customer-model.html'><span class='mono'>de.burger.it.infrastructure.customer.model</span></a></li>
+<li><a href='package-de-burger-it-infrastructure-logging.html'><span class='mono'>de.burger.it.infrastructure.logging</span></a></li>
+<li><a href='package-de-burger-it-infrastructure-order-adapter.html'><span class='mono'>de.burger.it.infrastructure.order.adapter</span></a></li>
+<li><a href='package-de-burger-it-infrastructure-order-model.html'><span class='mono'>de.burger.it.infrastructure.order.model</span></a></li>
+<li><a href='package-de-burger-it-infrastructure-relation-adapter.html'><span class='mono'>de.burger.it.infrastructure.relation.adapter</span></a></li>
+<li><a href='package-de-burger-it-infrastructure-relation-model.html'><span class='mono'>de.burger.it.infrastructure.relation.model</span></a></li>
+</ul>
+</body>
