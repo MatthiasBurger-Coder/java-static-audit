@@ -3,7 +3,7 @@ from pathlib import Path
 
 from analyzer.fs import iter_java_files
 from analyzer.metrics import estimate_complexity, count_loc
-from analyzer.java_ast import classes_with_lcom
+from analyzer.java_ast import classes_with_lcom_with_fallback
 from analyzer.heuristics_idempotency import scan as scan_idemp
 from analyzer.heuristics_resilience import scan as scan_res
 from analyzer.report import write_html, write_csvs
@@ -43,13 +43,19 @@ def main():
 
         files_rows.append({
             "file": str(f.relative_to(root)),
-            "bytes": size,
             "loc_total": total,
             "loc_logical": logical,
             "complexity_est": cc,
         })
 
-        for row in classes_with_lcom(src, str(f.relative_to(root))):
+        for row in classes_with_lcom_with_fallback(src, str(f.relative_to(root))):
+            if str(row.get('class')) == '<PARSE_ERROR>':
+                findings_rows.append({
+                    'file': row.get('file', str(f.relative_to(root))),
+                    'rule': 'PARSE_ERROR',
+                    'message': row.get('error', '(no message)')
+                })
+                continue
             class_rows.append(row)
 
         for rule, msg in scan_idemp(src):

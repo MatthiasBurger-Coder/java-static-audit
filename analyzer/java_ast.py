@@ -3,7 +3,6 @@ from javalang.ast import Node
 from typing import Dict, List, Set, Any, Iterable
 
 def _collect_fields(type_decl: Any) -> Set[str]:
-    """Collect declared field names of a class/interface."""
     fields = set()
     for m in getattr(type_decl, "fields", []):
         for decl in m.declarators:
@@ -11,7 +10,6 @@ def _collect_fields(type_decl: Any) -> Set[str]:
     return fields
 
 def _method_bodies(type_decl: Any) -> List[Any]:
-    """Return list of method declarations with bodies (skip abstract/interface)."""
     out = []
     for m in getattr(type_decl, "methods", []):
         if getattr(m, "body", None) is not None:
@@ -50,12 +48,10 @@ def _used_members_in_method(meth: Any, candidate_fields: Set[str]) -> Set[str]:
             qual = getattr(node, "qualifier", None)
             if name in candidate_fields and (qual is None or qual == "this"):
                 used.add(name)
-            # also consider qualifier chains like 'this.repo.field' – conservative: last segment
             if qual:
                 last = str(qual).split(".")[-1]
                 if last in candidate_fields:
                     used.add(last)
-
         # Method call on a field, e.g., 'repo.save(...)' or 'this.repo.save(...)'
         if isinstance(node, javalang.tree.MethodInvocation):
             qual = getattr(node, "qualifier", None)
@@ -63,13 +59,6 @@ def _used_members_in_method(meth: Any, candidate_fields: Set[str]) -> Set[str]:
                 last = str(qual).split(".")[-1]
                 if last in candidate_fields:
                     used.add(last)
-    return used
-    for node in _walk_ast(meth.body):
-        if isinstance(node, javalang.tree.MemberReference):
-            name = getattr(node, "member", None)
-            qual = getattr(node, "qualifier", None)
-            if name in candidate_fields and (qual is None or qual == "this"):
-                used.add(name)
     return used
 
 def classes_with_lcom(java_source: str, filename: str) -> list[dict]:
@@ -82,7 +71,7 @@ def classes_with_lcom(java_source: str, filename: str) -> list[dict]:
     except Exception as e:
         return [{"file": filename, "class": "<PARSE_ERROR>", "methods": 0, "lcom": None, "error": str(e)}]
 
-    types = [t for t in tree.types if hasattr(t, "name")]
+    types = [t for t in getattr(tree, "types", []) if hasattr(t, "name")]
     for t in types:
         if t.__class__.__name__ in ("ClassDeclaration",):
             fields = _collect_fields(t)
@@ -111,3 +100,127 @@ def classes_with_lcom(java_source: str, filename: str) -> list[dict]:
                 "fields": list(fields),
             })
     return results
+
+# --- Tree-sitter fallback (official packages: tree-sitter, tree-sitter-java) ---
+def _ts_available() -> bool:
+    try:
+        import tree_sitter_java  # noqa: F401
+        from tree_sitter import Parser, Language  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+def _classes_with_lcom_tree_sitter(java_source: str, filename: str) -> list[dict]:
+    try:
+        import tree_sitter_java as tsjava
+        from tree_sitter import Parser, Language
+        JAVA = Language(tsjava.language())
+        parser = Parser(JAVA)
+
+        src = java_source.encode("utf-8", errors="ignore")
+        tree = parser.parse(src)
+        root = tree.root_node
+
+        def text(n): return src[n.start_byte:n.end_byte].decode("utf-8", errors="ignore")
+
+        # collect class declarations
+        classes = []
+        stack = [root]
+        while stack:
+            n = stack.pop()
+            if n.type == "class_declaration":
+                classes.append(n)
+            stack.extend(reversed(n.children))
+
+        results = []
+        for c in classes:
+            cname, cbody = None, None
+            for ch in c.children:
+                if ch.type == "identifier":
+                    cname = text(ch)
+                if ch.type == "class_body":
+                    cbody = ch
+            if cbody is None:
+                continue
+
+            # fields
+            fields = set()
+            st = [cbody]
+            while st:
+                n = st.pop()
+                if n.type == "field_declaration":
+                    for ch in n.children:
+                        if ch.type == "variable_declarator":
+                            for ch2 in ch.children:
+                                if ch2.type == "identifier":
+                                    fields.add(text(ch2))
+                st.extend(reversed(n.children))
+
+            # methods (name + block)
+            methods = []
+            st = [cbody]
+            while st:
+                n = st.pop()
+                if n.type == "method_declaration":
+                    mname, mbody = None, None
+                    for ch in n.children:
+                        if ch.type == "identifier":
+                            mname = text(ch)
+                        if ch.type == "block":
+                            mbody = ch
+                    if mname:
+                        methods.append((mname, mbody))
+                st.extend(reversed(n.children))
+
+            # used fields per method
+            def used_fields(bnode):
+                used = set()
+                if bnode is None:
+                    return used
+                st2 = [bnode]
+                while st2:
+                    x = st2.pop()
+                    if x.type == "field_access":
+                        # object.identifier  OR  this.identifier
+                        idents = [ch for ch in x.children if ch.type == "identifier"]
+                        for idn in idents:
+                            nm = text(idn)
+                            if nm in fields:
+                                used.add(nm)
+                    elif x.type == "method_invocation":
+                        # object.method(...): first identifier often the object
+                        idents = [ch for ch in x.children if ch.type == "identifier"]
+                        if idents:
+                            obj = text(idents[0]).split(".")[-1]
+                            if obj in fields:
+                                used.add(obj)
+                    st2.extend(reversed(x.children))
+                return used
+
+            mf = {m: used_fields(b) for (m, b) in methods}
+            meths = list(mf.keys())
+            p_no, p_yes = 0, 0
+            for i in range(len(meths)):
+                for j in range(i+1, len(meths)):
+                    if mf[meths[i]] & mf[meths[j]]:
+                        p_yes += 1
+                    else:
+                        p_no += 1
+            lcom = max(p_no - p_yes, 0)
+            results.append({"file": filename, "class": cname or "<anon>", "methods": len(meths), "lcom": lcom, "fields": list(fields)})
+        return results
+    except Exception as e:
+        return [{"file": filename, "class": "<PARSE_ERROR>", "methods": 0, "lcom": None, "error": f"tree-sitter-fallback-failed: {e}"}]
+
+def classes_with_lcom_with_fallback(java_source: str, filename: str) -> list[dict]:
+    # try javalang first
+    try:
+        res = classes_with_lcom(java_source, filename)
+        if any(r.get("class") == "<PARSE_ERROR>" for r in res):
+            if _ts_available():
+                return _classes_with_lcom_tree_sitter(java_source, filename)
+        return res
+    except Exception:
+        if _ts_available():
+            return _classes_with_lcom_tree_sitter(java_source, filename)
+        return [{"file": filename, "class": "<PARSE_ERROR>", "methods": 0, "lcom": None, "error": "no parser available"}]

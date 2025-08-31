@@ -13,12 +13,10 @@ def iter_java_files(root: str, include_tests: bool = False) -> Iterator[Path]:
     """
     rootp = Path(root)
     for dirpath, dirnames, filenames in os.walk(rootp):
-        # prune excluded directories
         dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
         p = Path(dirpath)
         if not include_tests:
             if "src" in p.parts and "test" in p.parts:
-                # skip test sources
                 continue
         for f in filenames:
             if f.endswith(".java"):
